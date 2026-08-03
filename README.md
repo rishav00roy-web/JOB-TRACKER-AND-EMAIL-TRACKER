@@ -1,159 +1,59 @@
-# Turborepo starter
+# Agentic Job Application Tracker
 
-This Turborepo starter is maintained by the Turborepo core team.
+A fully-automated, Kanban-style Job Application Tracker designed to manage both scraped opportunities (via Apify and Claude) and manually submitted applications. Built with a modern, glassmorphic dark-mode aesthetic.
 
-## Using this example
+## Features
 
-Run the following command:
+- **Automated Pipeline**: Claude scrapes jobs via Apify and seamlessly pushes them to the board via an MCP server.
+- **Deterministic Scoring Engine**: Locally matches job descriptions against your structured skill profile (weighing agentic AI skills vs general frontend skills). No LLM API costs for scoring!
+- **Niche Flagging**: Highlights unconventional opportunities that don't neatly fit typical keyword algorithms.
+- **Deduplication**: Automatically deduplicates manual entries and scraped entries via application links.
+- **Modern Tech Stack**: Turborepo, Next.js (App Router), Tailwind CSS v4, and Supabase.
 
-```sh
-npx create-turbo@latest
-```
+## Architecture
 
-## What's inside?
+This is a Turborepo monorepo structured as follows:
+- `apps/web`: The Next.js frontend and internal API.
+- `apps/mcp`: The Node.js MCP server that securely passes data from Claude Desktop to the Next.js API.
+- `schema.sql`: The Postgres database schema and RLS configuration.
 
-This Turborepo includes the following packages/apps:
+## Setup Instructions
 
-### Apps and Packages
+1. **Database**
+   - Run the contents of `schema.sql` in your Supabase SQL editor to scaffold the `jobs` and `skills` tables.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+2. **Environment Variables**
+   - In `apps/web/`, create a `.env.local` file and add:
+     ```
+     NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+     NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+     SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+     INTERNAL_API_SECRET=your_secret_string
+     ```
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+3. **Running the Web App**
+   ```bash
+   npm install
+   npm run dev --filter web
+   ```
+   Navigate to `http://localhost:3000` to view the board.
 
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo build
-npm dlx turbo build
-npm exec turbo build
-```
-
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+4. **Connecting the MCP Server**
+   ```bash
+   npm run build --filter mcp-server
+   ```
+   Add the following to your `claude_desktop_config.json`:
+   ```json
+   {
+     "mcpServers": {
+       "job-tracker": {
+         "command": "node",
+         "args": ["/absolute/path/to/apps/mcp/dist/index.js"],
+         "env": {
+           "INTERNAL_API_SECRET": "your_secret_string",
+           "WEB_API_URL": "http://localhost:3000/api"
+         }
+       }
+     }
+   }
+   ```
