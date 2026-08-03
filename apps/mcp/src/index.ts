@@ -74,6 +74,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "sync_emails",
+        description: "Scan the user's Gmail inbox for job updates (interviews, rejections) and update the board automatically.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
     ],
   };
@@ -96,6 +104,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       body = args;
     } else if (name === "get_board_state") {
       endpoint = "/jobs/state";
+      method = "GET";
+    } else if (name === "sync_emails") {
+      endpoint = "/email/sync";
       method = "GET";
     } else {
       throw new Error(`Unknown tool: ${name}`);
