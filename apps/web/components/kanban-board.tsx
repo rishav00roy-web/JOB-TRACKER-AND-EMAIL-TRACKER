@@ -106,10 +106,16 @@ export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
             
             <div className="flex flex-col gap-4 overflow-y-auto pr-1 custom-scrollbar pb-10">
               {stageJobs.map(job => (
+                // Double-bezel: a thin outer shell (like a glass plate in a
+                // machined tray) around the actual card, radii concentric
+                // (outer 16px - 4px shell padding = inner 12px) so the curve
+                // reads as one continuous surface, not two coincidentally
+                // similar rounded rects.
                 <div
                   key={job.id}
-                  className="group relative bg-black/60 backdrop-blur-md border border-white/10 p-4 rounded-xl flex flex-col gap-3 hover:border-primary/50 hover:shadow-[0_0_20px_rgba(56,214,214,0.12)] transition-[border-color,box-shadow] duration-300"
+                  className="group relative rounded-2xl p-1 bg-white/[0.02] ring-1 ring-white/5 hover:ring-primary/25 hover:-translate-y-0.5 transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.5)]"
                 >
+                  <div className="relative bg-black/60 backdrop-blur-md border border-white/10 p-4 rounded-xl flex flex-col gap-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] group-hover:border-primary/50 group-hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(56,214,214,0.12)] transition-[border-color,box-shadow] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]">
                   {/* Subtle top inner glow on hover */}
                   <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
@@ -166,6 +172,7 @@ export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
                     >
                       Tailor
                     </button>
+                  </div>
                   </div>
                 </div>
               ))}

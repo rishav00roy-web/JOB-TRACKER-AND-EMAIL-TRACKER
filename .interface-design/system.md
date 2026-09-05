@@ -1,5 +1,50 @@
 # Agentic Job Tracker — design system
 
+## Font (fixed a real bug, 2026-09-05)
+`layout.tsx` was loading Geist via `next/font/local` and setting
+`--font-geist-sans`/`--font-geist-mono` as CSS variables on `<body>` — but
+nothing ever consumed them. Tailwind's `font-sans`/`font-mono` defaulted to
+the system stack the entire time, so despite "using Geist," the whole app
+(which leans heavily on `font-mono` for labels/tags/buttons) was rendering
+in generic system fonts. Fixed in `globals.css`'s `@theme` block:
+`--font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif`
+and the equivalent for `--font-mono`. **If Geist (or any custom font) is
+ever swapped in this project again, verify the `@theme` mapping actually
+exists — loading a font file is necessary but not sufficient.**
+
+## Depth — double-bezel cards (2026-09-05)
+User feedback after the first redesign pass: it "doesn't have the premium
+tool effect." The first pass was a conservative refinement (fix real bugs,
+preserve the existing look) — this was a genuinely different ask: make it
+*read* as premium, not just be bug-free. Pulled specific techniques from
+the `high-end-visual-design` skill, but that skill is written for
+marketing/landing pages (massive `py-24+` whitespace, hero sections, nav
+islands) — applying it wholesale would have wrecked a dense working
+dashboard. Cherry-picked what transfers to a data-dense tool:
+
+- **Job cards now use a "double-bezel" structure** — a thin outer shell
+  (`bg-white/[0.02] ring-1 ring-white/5 rounded-2xl p-1`) wrapping the
+  actual card (`rounded-xl` = outer 16px − 4px shell padding, concentric).
+  The inner card gets an inset highlight
+  (`shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]`) so it reads as a
+  physical glass plate in a tray, not a flat div. **Apply this same
+  outer-shell + concentric-inner pattern to any other primary card/panel
+  added later** (e.g. if the Tailor panel's `ChangeCard` gets revisited).
+- **Custom easing, not default `ease`**: `ease-[cubic-bezier(0.32,0.72,0,1)]`
+  on card hover (border/shadow) and the new hover lift
+  (`hover:-translate-y-0.5`, transform-only, GPU-safe). Use this same
+  curve for future hover/entrance motion on this board rather than
+  Tailwind's default `ease-out`/`ease-in-out` — it's what actually reads
+  as "considered" rather than default.
+- **Explicitly did NOT apply**: bento/asymmetric grids, massive section
+  padding, hero typography, nav-island patterns, staggered scroll-reveal
+  entrances. All of those are landing-page moves that would hurt a
+  frequently-used dense dashboard (per `interface-design`'s own rule:
+  high-frequency interactions get *less* motion, not more). If a future
+  request wants a landing/marketing page for this project (unlikely, but
+  possible for a portfolio showcase of it), those techniques become
+  appropriate there — not on the working board itself.
+
 ## Direction and feel
 Dark, technical, data-dense — a monitoring console for a personal job search,
 not a marketing dashboard. Monospace labels (`font-mono`) for anything that

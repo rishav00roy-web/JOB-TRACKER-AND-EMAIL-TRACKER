@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 @theme {
+  /* Geist was being loaded (see layout.tsx) but never actually wired as the
+     font — Tailwind's font-sans/font-mono defaulted to the system stack the
+     whole time. This is the single highest-leverage fix for "generic" feel:
+     font-mono is used everywhere in this app (labels, tags, buttons). */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
 
