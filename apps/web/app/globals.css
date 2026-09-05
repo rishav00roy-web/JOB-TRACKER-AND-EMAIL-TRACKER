@@ -68,33 +68,37 @@
   }
 
   .dark {
-    --background: 0 0% 3%;
-    --foreground: 0 0% 90%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 92%;
 
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 90%;
+    --card: 0 0% 6%;
+    --card-foreground: 0 0% 92%;
 
-    --popover: 0 0% 5%;
-    --popover-foreground: 0 0% 90%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 92%;
 
-    --primary: 184 100% 50%;
+    /* Single accent, desaturated from the original 100% — one hue used with
+       intention rather than a second color for "medium" tiers. */
+    --primary: 184 75% 52%;
     --primary-foreground: 0 0% 0%;
 
-    --secondary: 258 90% 66%;
+    /* Reserved for the one thing that isn't a score: the niche-opportunity
+       flag. Not used for score tiers, buttons, or general accents. */
+    --secondary: 258 55% 68%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 60%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 62%;
 
-    --accent: 184 100% 50%;
+    --accent: 184 75% 52%;
     --accent-foreground: 0 0% 0%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 58%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 184 100% 50%;
+    --input: 0 0% 10%;
+    --ring: 184 75% 52%;
   }
 }
 
@@ -104,5 +108,20 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

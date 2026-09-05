@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { TailorPanel } from '@/components/tailor-panel'
 
 type Job = {
   id: string
@@ -11,6 +12,8 @@ type Job = {
   key_skills_match: string[]
   application_link: string
   niche_flag?: boolean
+  clearance_required?: boolean
+  description?: string | null
 }
 
 const STAGES = ['wishlist', 'applied', 'interview', 'offer', 'rejected'] as const
@@ -19,27 +22,31 @@ function ScoreRing({ score }: { score: number }) {
   const radius = 14
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset = circumference - (score / 100) * circumference
-  // Use primary (cyan) for high scores, secondary (violet) for medium, and muted for low
-  const strokeColor = score >= 80 ? 'var(--color-primary)' : score >= 50 ? 'var(--color-secondary)' : 'var(--color-muted-foreground)'
-  const glowClass = score >= 80 ? 'drop-shadow-[0_0_4px_rgba(0,240,255,0.8)]' : score >= 50 ? 'drop-shadow-[0_0_4px_rgba(139,92,246,0.6)]' : ''
+
+  // Thresholds match how scoring.ts actually distributes: headline score is
+  // the best single category's coverage, so a genuinely strong non-technical
+  // AI-role match often lands ~35-60%, not 80+. One accent (cyan) throughout —
+  // tiers are expressed as glow intensity, not a second hue.
+  const tier = score >= 60 ? 'strong' : score >= 35 ? 'good' : 'weak'
+  const glowClass =
+    tier === 'strong'
+      ? 'drop-shadow-[0_0_5px_rgba(56,214,214,0.85)]'
+      : tier === 'good'
+        ? 'drop-shadow-[0_0_3px_rgba(56,214,214,0.45)]'
+        : ''
+  const strokeOpacity = tier === 'weak' ? '0.35' : '1'
 
   return (
     <div className="relative flex items-center justify-center w-10 h-10 shrink-0">
       <svg className="w-10 h-10 transform -rotate-90">
+        <circle cx="20" cy="20" r={radius} className="stroke-white/10" strokeWidth="3" fill="transparent" />
         <circle
           cx="20"
           cy="20"
           r={radius}
-          className="stroke-white/10"
-          strokeWidth="3"
-          fill="transparent"
-        />
-        <circle
-          cx="20"
-          cy="20"
-          r={radius}
-          className={`transition-all duration-1000 ease-out ${glowClass}`}
-          stroke={strokeColor}
+          className={`transition-[stroke-dashoffset] duration-700 ease-out ${glowClass}`}
+          stroke="var(--color-primary)"
+          strokeOpacity={strokeOpacity}
           strokeWidth="3"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
@@ -47,15 +54,42 @@ function ScoreRing({ score }: { score: number }) {
           fill="transparent"
         />
       </svg>
-      <span className="absolute text-[10px] font-bold font-mono text-foreground">{score}</span>
+      <span className="absolute text-[11px] font-bold font-mono tabular-nums text-foreground">{score}</span>
     </div>
   )
 }
 
 export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
   const [jobs] = useState<Job[]>(initialJobs)
+  const [tailoring, setTailoring] = useState<Job | null>(null)
 
   return (
+    <>
+    {tailoring && (
+      <TailorPanel
+        job={{
+          id: tailoring.id,
+          job_title: tailoring.job_title,
+          company: tailoring.company,
+          hasDescription: Boolean(tailoring.description),
+        }}
+        onClose={() => setTailoring(null)}
+      />
+    )}
+    {/* Mobile-only hint that more stage columns exist off-screen — the board
+        is a horizontal-scroll row with no visible scrollbar on touch
+        devices, so without this the other columns are undiscoverable. A
+        gradient fade doesn't work here (nothing behind it to fade against
+        at rest, since a column often ends before the viewport edge) — a
+        plain visible indicator does. */}
+    <div
+      className="sm:hidden fixed z-10 flex items-center gap-1 bg-black/70 backdrop-blur-md border border-white/10 rounded-full px-2 py-1.5 pointer-events-none animate-pulse"
+      style={{ top: '50%', right: '12px', transform: 'translateY(-50%)' }}
+      aria-hidden="true"
+    >
+      <span className="text-[10px] font-mono text-muted-foreground">SWIPE</span>
+      <span className="text-primary text-xs">→</span>
+    </div>
     <div className="flex h-screen w-full overflow-x-auto overflow-y-hidden bg-background p-6 gap-6 custom-scrollbar">
       {STAGES.map(stage => {
         const stageJobs = jobs.filter(j => j.stage === stage)
@@ -72,9 +106,9 @@ export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
             
             <div className="flex flex-col gap-4 overflow-y-auto pr-1 custom-scrollbar pb-10">
               {stageJobs.map(job => (
-                <div 
-                  key={job.id} 
-                  className="group relative bg-black/60 backdrop-blur-md border border-white/10 p-4 rounded-xl flex flex-col gap-3 hover:border-primary/50 hover:shadow-[0_0_20px_rgba(0,240,255,0.15)] transition-all duration-300"
+                <div
+                  key={job.id}
+                  className="group relative bg-black/60 backdrop-blur-md border border-white/10 p-4 rounded-xl flex flex-col gap-3 hover:border-primary/50 hover:shadow-[0_0_20px_rgba(56,214,214,0.12)] transition-[border-color,box-shadow] duration-300"
                 >
                   {/* Subtle top inner glow on hover */}
                   <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -102,22 +136,36 @@ export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
                     </div>
                   )}
                   
-                  {job.niche_flag && (
+                  {job.clearance_required && (
+                    <div className="flex items-center gap-1 mt-1 w-fit" title="Requires U.S. government clearance or citizenship verification">
+                      <div className="w-1.5 h-1.5 rounded-full bg-destructive" aria-hidden="true" />
+                      <span className="text-[10px] font-mono text-destructive">Clearance Required</span>
+                    </div>
+                  )}
+
+                  {job.niche_flag && !job.clearance_required && (
                     <div className="flex items-center gap-1 mt-1 w-fit">
-                      <div className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" aria-hidden="true" />
                       <span className="text-[10px] font-mono text-secondary">Niche Opportunity</span>
                     </div>
                   )}
 
-                  <div className="mt-2 pt-3 border-t border-white/5 flex items-center justify-between">
-                    <a 
-                      href={job.application_link} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                  <div className="mt-2 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+                    <a
+                      href={job.application_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors rounded-sm flex items-center gap-1 active:scale-[0.96]"
                     >
-                      VIEW POSTING <span className="text-xs">↗</span>
+                      VIEW POSTING <span className="text-xs" aria-hidden="true">↗</span>
                     </a>
+                    <button
+                      onClick={() => setTailoring(job)}
+                      title={job.description ? 'Tailor your resume to this posting' : 'No description stored — you can paste one'}
+                      className="text-[11px] font-mono uppercase tracking-wider text-primary/80 hover:text-primary border border-primary/20 hover:border-primary/50 px-2 py-1 rounded-md transition-colors active:scale-[0.96]"
+                    >
+                      Tailor
+                    </button>
                   </div>
                 </div>
               ))}
@@ -131,5 +179,6 @@ export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
         )
       })}
     </div>
+    </>
   )
 }
