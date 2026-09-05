@@ -91,23 +91,28 @@
    dark-only (see layout.tsx's hardcoded `dark` class) so :root exists for
    token completeness but .dark below is what actually ships. */
 :root {
-  --background: oklch(0.99 0.002 95);
+  /* Was near-pure white (bg 0.99, card 1 0 0) — indistinguishable from each
+     other and harsh against the emerald accent. A page background this close
+     to L=1 has nowhere left to go for elevation, so cards had to overshoot
+     into literal white. Both pulled down and separated so cards read as a
+     distinct raised surface instead of a blank. */
+  --background: oklch(0.965 0.004 95);
   --foreground: oklch(0.16 0.01 260);
-  --card: oklch(1 0 0);
+  --card: oklch(0.99 0.003 95);
   --card-foreground: oklch(0.16 0.01 260);
-  --popover: oklch(1 0 0);
+  --popover: oklch(0.99 0.003 95);
   --popover-foreground: oklch(0.16 0.01 260);
   --primary: oklch(0.6 0.15 155);
   --primary-foreground: oklch(0.99 0.01 155);
   --secondary: oklch(0.72 0.14 70);
   --secondary-foreground: oklch(0.2 0.03 70);
-  --muted: oklch(0.95 0.003 95);
+  --muted: oklch(0.93 0.005 95);
   --muted-foreground: oklch(0.5 0.01 260);
-  --accent: oklch(0.94 0.03 155);
+  --accent: oklch(0.92 0.035 155);
   --accent-foreground: oklch(0.3 0.1 155);
   --destructive: oklch(0.58 0.21 25);
-  --border: oklch(0.9 0.005 95);
-  --input: oklch(0.9 0.005 95);
+  --border: oklch(0.88 0.006 95);
+  --input: oklch(0.88 0.006 95);
   --ring: oklch(0.6 0.15 155);
   --chart-1: oklch(0.6 0.15 155);
   --chart-2: oklch(0.72 0.14 70);
@@ -115,13 +120,13 @@
   --chart-4: oklch(0.65 0.02 260);
   --chart-5: oklch(0.75 0.02 260);
   --radius: 0.75rem;
-  --sidebar: oklch(0.98 0.002 95);
+  --sidebar: oklch(0.955 0.004 95);
   --sidebar-foreground: oklch(0.16 0.01 260);
   --sidebar-primary: oklch(0.6 0.15 155);
   --sidebar-primary-foreground: oklch(0.99 0.01 155);
-  --sidebar-accent: oklch(0.94 0.03 155);
+  --sidebar-accent: oklch(0.92 0.035 155);
   --sidebar-accent-foreground: oklch(0.3 0.1 155);
-  --sidebar-border: oklch(0.9 0.005 95);
+  --sidebar-border: oklch(0.88 0.006 95);
   --sidebar-ring: oklch(0.6 0.15 155);
 }
 
