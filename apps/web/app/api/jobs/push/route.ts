@@ -52,7 +52,19 @@ export async function POST(req: Request) {
       application_link: job.application_link,
       easy_apply: job.easy_apply,
       compensation_insight: job.compensation_insight,
-      notes: job.niche_flag ? 'Flagged as niche role' : null,
+      // Kept so the resume tailorer has JD text to work against later; a
+      // posting is usually gone by the time you want to re-read it.
+      description: job.description,
+      niche_flag: job.niche_flag,
+      remote_flag: job.remote_flag,
+      clearance_required: job.clearance_required,
+      category_scores: job.category_scores,
+      best_category: job.best_category,
+      notes: job.clearance_required
+        ? 'Requires US clearance/citizenship — deprioritized'
+        : job.niche_flag
+          ? 'Flagged as niche role'
+          : null,
     }))
 
     const { error: insertError } = await supabaseAdmin
