@@ -57,9 +57,34 @@ function ScoreRing({ score }: { score: number }) {
   )
 }
 
+type FillStatus = { loading: boolean; result?: string; error?: string }
+
 export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
   const [jobs] = useState<Job[]>(initialJobs)
   const [tailoring, setTailoring] = useState<Job | null>(null)
+  const [fillStatus, setFillStatus] = useState<Record<string, FillStatus>>({})
+
+  async function handleAutoFill(jobId: string) {
+    setFillStatus((s) => ({ ...s, [jobId]: { loading: true } }))
+    try {
+      const res = await fetch('/api/jobs/apply-fill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Auto-fill failed')
+      setFillStatus((s) => ({
+        ...s,
+        [jobId]: {
+          loading: false,
+          result: `${data.filled_fields?.length ?? 0} filled, ${data.needs_manual_review?.length ?? 0} left for you — check the window that opened`,
+        },
+      }))
+    } catch (err: any) {
+      setFillStatus((s) => ({ ...s, [jobId]: { loading: false, error: err.message } }))
+    }
+  }
 
   return (
     <>
@@ -158,25 +183,49 @@ export function KanbanBoard({ initialJobs }: { initialJobs: Job[] }) {
                       )}
                     </CardContent>
 
-                    <CardFooter className="px-4 flex items-center justify-between gap-2 border-t-0 bg-transparent">
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="px-0 h-auto text-muted-foreground font-mono"
-                        nativeButton={false}
-                        render={<a href={job.application_link} target="_blank" rel="noopener noreferrer" />}
-                      >
-                        View posting <span aria-hidden="true">↗</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setTailoring(job)}
-                        title={job.description ? 'Tailor your resume to this posting' : 'No description stored — you can paste one'}
-                        className="font-mono uppercase tracking-wide text-primary border-primary/25 hover:bg-primary/10"
-                      >
-                        Tailor
-                      </Button>
+                    <CardFooter className="px-4 flex flex-col items-stretch gap-2 border-t-0 bg-transparent">
+                      <div className="flex items-center justify-between gap-2">
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="px-0 h-auto text-muted-foreground font-mono"
+                          nativeButton={false}
+                          render={<a href={job.application_link} target="_blank" rel="noopener noreferrer" />}
+                        >
+                          View posting <span aria-hidden="true">↗</span>
+                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAutoFill(job.id)}
+                            disabled={fillStatus[job.id]?.loading}
+                            title="Opens a real browser window, fills known fields (name/email/resume), leaves it open for you to finish and submit"
+                            className="font-mono uppercase tracking-wide text-secondary-foreground border-secondary/40 hover:bg-secondary/15"
+                          >
+                            {fillStatus[job.id]?.loading ? 'Filling…' : 'Auto-fill'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTailoring(job)}
+                            title={job.description ? 'Tailor your resume to this posting' : 'No description stored — you can paste one'}
+                            className="font-mono uppercase tracking-wide text-primary border-primary/25 hover:bg-primary/10"
+                          >
+                            Tailor
+                          </Button>
+                        </div>
+                      </div>
+                      {fillStatus[job.id]?.result && (
+                        <p className="text-[10px] font-mono text-muted-foreground leading-snug">
+                          {fillStatus[job.id]?.result}
+                        </p>
+                      )}
+                      {fillStatus[job.id]?.error && (
+                        <p className="text-[10px] font-mono text-destructive leading-snug">
+                          {fillStatus[job.id]?.error}
+                        </p>
+                      )}
                     </CardFooter>
                   </Card>
                 ))}
