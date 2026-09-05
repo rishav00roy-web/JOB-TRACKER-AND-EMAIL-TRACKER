@@ -1,6 +1,6 @@
-import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import { KanbanBoard } from '@/components/kanban-board'
+import { Button } from '@/components/ui/button'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,21 +31,18 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-card/50 backdrop-blur">
+      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-card/60 backdrop-blur">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center border border-white/10">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <div className="w-8 h-8 rounded-md bg-primary/12 flex items-center justify-center ring-1 ring-primary/20">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           </div>
           <h1 className="font-semibold tracking-tight text-foreground">Agentic Job Tracker</h1>
         </div>
         <div className="flex items-center gap-4 text-sm font-medium">
           <span className="text-muted-foreground hidden sm:inline">Scraped &amp; scored natively.</span>
-          <Link
-            href="/profile"
-            className="text-xs font-mono uppercase tracking-wider text-primary/80 hover:text-primary border border-primary/20 hover:border-primary/50 px-3 py-1.5 rounded-lg transition-colors active:scale-[0.96]"
-          >
-            Career Profile
-          </Link>
+          <Button variant="outline" size="sm" className="font-mono uppercase tracking-wide text-primary border-primary/25 hover:bg-primary/10" nativeButton={false} render={<a href="/profile" />}>
+            Career profile
+          </Button>
         </div>
       </header>
       
