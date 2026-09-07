@@ -46,6 +46,27 @@ function dateRange(start: string, end: string) {
   return [start, end].filter(Boolean).join(' – ')
 }
 
+// Experience entries show duration ("5 years") instead of literal start–end
+// dates — a deliberate resume-writing choice (keeps focus on how long, not
+// exactly when), not an omission. Education keeps real dates via dateRange.
+function experienceDuration(start: string, end: string) {
+  if (!start) return dateRange(start, end)
+  const startDate = new Date(start)
+  const endDate = end ? new Date(end) : new Date()
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return dateRange(start, end)
+
+  const totalMonths = Math.max(
+    0,
+    (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth())
+  )
+  if (totalMonths < 12) {
+    const m = Math.max(1, totalMonths)
+    return `${m} month${m === 1 ? '' : 's'}`
+  }
+  const years = Math.round(totalMonths / 12)
+  return `${years} year${years === 1 ? '' : 's'}`
+}
+
 export async function generateDocx(profile: CareerProfile): Promise<Buffer> {
   const children: Paragraph[] = []
 
@@ -85,7 +106,7 @@ export async function generateDocx(profile: CareerProfile): Promise<Buffer> {
   if (profile.experience?.length) {
     children.push(sectionHeading('Experience'))
     for (const exp of profile.experience) {
-      children.push(roleLine([exp.title, exp.company].filter(Boolean).join(' — '), dateRange(exp.startDate, exp.endDate)))
+      children.push(roleLine([exp.title, exp.company].filter(Boolean).join(' — '), experienceDuration(exp.startDate, exp.endDate)))
 
       const sub = [exp.location, exp.technologies?.join(', ')].filter(Boolean).join('  •  ')
       if (sub) children.push(bodyParagraph(sub, { italics: true, spacingAfter: 40 }))
