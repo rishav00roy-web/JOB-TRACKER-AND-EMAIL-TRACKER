@@ -65,7 +65,15 @@ export async function POST(req: Request) {
     }
 
     // 2. Score jobs
-    const scoredJobs = jobs.map(job => scoreJob(job, skills || []))
+    const allScoredJobs = jobs.map(job => scoreJob(job, skills || []))
+
+    // No skill-category overlap at all means the posting shares literally
+    // nothing with the profile — not a low score, no signal. Keeping these
+    // was most of the board's noise (114 of 158 jobs at one point had zero
+    // category match). Drop before the company lookup so nothing gets
+    // spent looking up a company for a job about to be discarded.
+    const droppedNoMatch = allScoredJobs.length - allScoredJobs.filter((j) => j.best_category !== null).length
+    const scoredJobs = allScoredJobs.filter((j) => j.best_category !== null)
 
     // 2b. Company page lookup, deduped by company name across the batch.
     // Throttled to 5 concurrent — a batch this size can easily mean 100+
@@ -132,7 +140,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, count: jobsToInsert.length, filtered_stale: filteredStale })
+    return NextResponse.json({
+      success: true,
+      count: jobsToInsert.length,
+      filtered_stale: filteredStale,
+      dropped_no_category_match: droppedNoMatch,
+    })
 
   } catch (err: any) {
     console.error('Exception in push jobs:', err)
