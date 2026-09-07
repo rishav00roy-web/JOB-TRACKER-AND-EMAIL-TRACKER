@@ -17,7 +17,7 @@ export class AiNotConfiguredError extends Error {
   }
 }
 
-async function callChatCompletion(messages: ChatMessage[], opts: { json?: boolean } = {}) {
+async function callChatCompletion(messages: ChatMessage[], opts: { json?: boolean; model?: string } = {}) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new AiNotConfiguredError()
 
@@ -28,7 +28,7 @@ async function callChatCompletion(messages: ChatMessage[], opts: { json?: boolea
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: DEFAULT_MODEL,
+      model: opts.model || DEFAULT_MODEL,
       messages,
       temperature: 0.1,
       ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
@@ -50,7 +50,7 @@ async function callChatCompletion(messages: ChatMessage[], opts: { json?: boolea
 
 // Two attempts: transient 5xx / rate limits are common enough on OpenRouter
 // that a single retry saves a lot of failed tailoring runs.
-export async function callChatCompletionWithRetry(messages: ChatMessage[], opts: { json?: boolean } = {}) {
+export async function callChatCompletionWithRetry(messages: ChatMessage[], opts: { json?: boolean; model?: string } = {}) {
   try {
     return await callChatCompletion(messages, opts)
   } catch (err) {

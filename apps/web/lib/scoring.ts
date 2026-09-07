@@ -205,10 +205,17 @@ export function scoreJob(job: ScrapedJobInput, userSkills: Skill[]): ScoredJobRe
   }
 
   // Headline score is the strongest category, so a posting is judged against
-  // the world it actually belongs to.
+  // the world it actually belongs to. `technical` is excluded from this
+  // selection entirely (not just dampened) — user is not an unaided
+  // professional engineer and doesn't want engineering roles surfaced at
+  // all, even as a fallback when nothing else matches. A posting that also
+  // has real ai/non_technical signal still surfaces at that (lower) score;
+  // one with technical-only overlap now correctly falls through to
+  // best_category = null and gets dropped at push time, same as zero-match.
   let best_category: SkillCategory | null = null
   let match_score = 0
   for (const c of CATEGORIES) {
+    if (c === 'technical') continue
     if ((possible[c] ?? 0) > 0 && category_scores[c] > match_score) {
       match_score = category_scores[c]
       best_category = c
@@ -233,15 +240,17 @@ export function scoreJob(job: ScrapedJobInput, userSkills: Skill[]): ScoredJobRe
     match_score = Math.round(match_score * ON_SITE_SUPPRESSION_MULTIPLIER)
   }
 
+  // best_category can never be 'technical' any more (see the loop above), so
+  // the old "senior technical, scored down" message can't fire — technical
+  // postings are dropped entirely at push time instead, not shown with an
+  // explanatory score.
   const experience_match_summary = clearance_required
     ? 'Requires U.S. government clearance/citizenship verification — deprioritized.'
     : on_site_required
       ? 'Posting text says on-site/office-based despite being listed as remote — deprioritized.'
-      : isSeniorTechnical && best_category === 'technical'
-        ? `${category_scores.technical}% technical keyword coverage, but posting signals senior/staff-level unaided ownership — scored down.`
-        : best_category
-          ? `${category_scores[best_category]}% coverage of your ${CATEGORY_LABEL[best_category]} skills (${matchedSkills.length} matched).`
-          : `Matches ${matchedSkills.length} key skills in your profile.`
+      : best_category
+        ? `${category_scores[best_category]}% coverage of your ${CATEGORY_LABEL[best_category]} skills (${matchedSkills.length} matched).`
+        : `Matches ${matchedSkills.length} key skills in your profile.`
 
   const why_fits = clearance_required
     ? 'Needs a security clearance or US-citizen verification most applicants cannot get.'

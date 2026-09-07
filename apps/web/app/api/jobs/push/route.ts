@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { checkAuth } from '@/lib/auth'
-import { scoreJob, ScrapedJobInput } from '@/lib/scoring'
+import { scoreJob, ScrapedJobInput, ScoredJobResult } from '@/lib/scoring'
+import { hasApiKey, callChatCompletionWithRetry } from '@/lib/resume/ai'
 
 // Indeed's redirect links (/rc/clk?jk=...&bb=...) carry a fresh tracking
 // token on every page load — the `jk` param is the only stable part, so the
@@ -18,6 +19,65 @@ function canonicalizeApplicationLink(link: string): string {
     // not a parseable URL — leave it as-is, scoring/insert will handle it
   }
   return link
+}
+
+// Kept on the same free-tier model the n8n extraction branches already use
+// (proven reliable there: fast, clean JSON). Deliberately NOT left to
+// lib/resume/ai's default model — that default is a paid OpenRouter model
+// (anthropic/claude-sonnet-4.5) meant for the tailor feature's occasional,
+// user-initiated calls. Running that against every scraped job automatically
+// would turn an unattended daily cron into a real, uncapped per-token bill
+// nobody explicitly approved. This stage shares extraction's existing free
+// 50/day OpenRouter budget rather than opening a new spending surface.
+const JD_CHECK_MODEL = 'liquid/lfm-2.5-2.6b:free'
+
+const CANDIDATE_PROFILE =
+  'The candidate is early-career and largely self-taught, building web apps with AI coding tools ' +
+  '(Claude Code, Antigravity) rather than working as an unaided professional software engineer. ' +
+  'They are not looking for hands-on software engineering / coding roles at any level, including ' +
+  '"AI engineer" titles that are really SWE roles in disguise. They want either (a) non-technical ' +
+  'roles (ops, support, admin, research, writing, sales, community, enablement, etc.) where AI ' +
+  'fluency is a bonus/differentiator rather than the core job, or (b) genuine AI-generalist roles ' +
+  '(AI training, data annotation, model evaluation, prompt writing, AI content review) that do not ' +
+  'require a CS/engineering background. They are open to remote work from any country/timezone and ' +
+  'hold no security clearance or US citizenship.'
+
+// Stage-2 filter, LLM-backed: keyword scoring alone can't tell "AI Content
+// Reviewer" (wanted) from "AI Engineer" that's secretly a backend role
+// (not wanted), can't read a buried "10+ years required," and can't catch
+// "remote" postings that actually require a specific country/timezone.
+// Deliberately called only on jobs that already passed the free filters
+// above (freshness, category match, not-technical) — the expense scales
+// with "plausible candidates," not raw scrape volume. Fails open on any
+// error (no key, 429, timeout, bad JSON): a bad OpenRouter day should
+// degrade to today's keyword-only behavior, not silently empty the board.
+async function jdSanityCheck(job: ScoredJobResult): Promise<{ keep: boolean; reason: string }> {
+  try {
+    const content = await callChatCompletionWithRetry(
+      [
+        {
+          role: 'system',
+          content:
+            `You screen job postings for one specific candidate. ${CANDIDATE_PROFILE} ` +
+            'Given a job title and its full description, decide if it is worth showing them. ' +
+            'Drop it if: it actually requires hands-on coding/engineering as a core function ' +
+            'regardless of title; it sets a seniority/experience bar clearly beyond early-career ' +
+            '(e.g. "10+ years", "expert-level", "must have shipped production ML systems"); or it ' +
+            'has a real location/citizenship/timezone restriction despite claiming remote. ' +
+            'Otherwise keep it. Respond with strict JSON only: {"keep": boolean, "reason": "one short sentence"}.',
+        },
+        {
+          role: 'user',
+          content: `Title: ${job.job_title}\n\nDescription:\n${(job.description || '').slice(0, 6000)}`,
+        },
+      ],
+      { json: true, model: JD_CHECK_MODEL }
+    )
+    const parsed = JSON.parse(content)
+    return { keep: parsed.keep !== false, reason: String(parsed.reason || '') }
+  } catch {
+    return { keep: true, reason: '' }
+  }
 }
 
 // One Firecrawl search per unique company in the batch, not per job — a
@@ -94,9 +154,26 @@ export async function POST(req: Request) {
     // category match). Drop before the company lookup so nothing gets
     // spent looking up a company for a job about to be discarded.
     const droppedNoMatch = allScoredJobs.length - allScoredJobs.filter((j) => j.best_category !== null).length
-    const scoredJobs = allScoredJobs.filter((j) => j.best_category !== null)
+    const categoryMatchedJobs = allScoredJobs.filter((j) => j.best_category !== null)
 
-    // 2b. Company page lookup, deduped by company name across the batch.
+    // 2b. LLM JD sanity check (see jdSanityCheck above) — skipped outright,
+    // not just fail-open per-job, when no key is configured at all.
+    let droppedByJdCheck = 0
+    const jdCheckSkipped = !hasApiKey()
+    let scoredJobs = categoryMatchedJobs
+    if (!jdCheckSkipped) {
+      const CONCURRENCY_JD = 5
+      const verdicts: { keep: boolean; reason: string }[] = []
+      for (let i = 0; i < categoryMatchedJobs.length; i += CONCURRENCY_JD) {
+        const batch = categoryMatchedJobs.slice(i, i + CONCURRENCY_JD)
+        const results = await Promise.all(batch.map((j) => jdSanityCheck(j)))
+        verdicts.push(...results)
+      }
+      scoredJobs = categoryMatchedJobs.filter((_, idx) => verdicts[idx]!.keep)
+      droppedByJdCheck = categoryMatchedJobs.length - scoredJobs.length
+    }
+
+    // 2c. Company page lookup, deduped by company name across the batch.
     // Throttled to 5 concurrent — a batch this size can easily mean 100+
     // unique companies, and firing them all at once would trip Firecrawl's
     // free-tier rate limit rather than just being slow.
@@ -166,6 +243,8 @@ export async function POST(req: Request) {
       count: jobsToInsert.length,
       filtered_stale: filteredStale,
       dropped_no_category_match: droppedNoMatch,
+      dropped_by_jd_check: droppedByJdCheck,
+      jd_check_skipped: jdCheckSkipped,
     })
 
   } catch (err: any) {
