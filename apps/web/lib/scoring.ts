@@ -42,6 +42,7 @@ export type ScoredJobResult = ScrapedJobInput & {
   niche_flag: boolean
   remote_flag: boolean
   clearance_required: boolean
+  on_site_required: boolean
 }
 
 const CATEGORIES: SkillCategory[] = ['ai', 'non_technical', 'technical']
@@ -81,6 +82,17 @@ const SENIORITY_TITLE_KEYWORDS = [
 ]
 const SENIORITY_PENALTY_MULTIPLIER = 0.35
 
+// `technical` (React, TypeScript, Git, SQL, plain "Python"...) was only ever
+// meant to be minority-weight supporting signal — a bonus that makes an ai/
+// non_technical posting look stronger for also mentioning real tooling, not
+// a category that should win the headline on its own. Without a standing
+// dampener, a purely mainstream-software-engineering posting with zero ai/
+// non_technical language could still win best_category outright, which is
+// exactly the "no tech roles" the user is not an unaided professional
+// engineer for. Applied unconditionally, before the seniority check below,
+// which stacks on top for senior-titled postings specifically.
+const TECHNICAL_MINORITY_MULTIPLIER = 0.4
+
 // Federal/government-adjacent postings (FOIA analyst roles especially) are
 // frequently labeled "remote" while actually requiring US-person status or
 // a security clearance most applicants can't get. This is a hard
@@ -93,6 +105,23 @@ const CLEARANCE_KEYWORDS = [
   'polygraph', 'obtain a security clearance', 'obtain a clearance', 'must be a us citizen',
 ]
 const CLEARANCE_SUPPRESSION_MULTIPLIER = 0.15
+
+// Some boards (RemoteOK especially) let companies post office-based roles
+// under a "remote" listing — the board-level tag is wrong, not the posting
+// text itself, which usually says so plainly ("This is an office-based
+// role", "Location: <city> Head Office"). User wants remote-only, so this
+// is a hard disqualifier, same shape as clearance above. Kept to high-
+// precision phrases only — "occasional office visits" or naming an HQ city
+// alone shouldn't trigger this, only an explicit on-site requirement.
+const ON_SITE_KEYWORDS = [
+  'office-based role', 'office based role', 'on-site role', 'onsite role',
+  'on-site position', 'onsite position', 'in-office role', 'in office role',
+  'must be based in the office', 'required to work from our office',
+  'work from our office', 'attend the office', 'commute to the office',
+  'no remote work', 'not a remote role', 'must work on-site', 'must work onsite',
+  'office-based position', 'this is an office-based',
+]
+const ON_SITE_SUPPRESSION_MULTIPLIER = 0.15
 
 // Skill names come from the database, so they can contain regex metacharacters
 // (C++, Node.js, .NET). Escaping them keeps `new RegExp` from throwing and stops
@@ -160,12 +189,16 @@ export function scoreJob(job: ScrapedJobInput, userSkills: Skill[]): ScoredJobRe
     return acc
   }, {} as CategoryScores)
 
+  // Standing dampener: technical is minority-weight signal, not a category
+  // that should win the headline on its own (see TECHNICAL_MINORITY_MULTIPLIER).
+  category_scores.technical = Math.round(category_scores.technical * TECHNICAL_MINORITY_MULTIPLIER)
+
   // Keyword overlap in `technical` doesn't mean qualified: a "Senior DevOps
   // Engineer" posting can hit 100% purely by mentioning React/TypeScript/Git
   // enough times, with zero signal that "Senior" means years of unaided
-  // infra ownership the user doesn't have. Cap technical specifically when
-  // the title signals that seniority — ai/non_technical are real targets
-  // even at "senior" level, so they're untouched.
+  // infra ownership the user doesn't have. Cap technical further, on top of
+  // the standing dampener above, when the title signals that seniority —
+  // ai/non_technical are real targets even at "senior" level, untouched.
   const isSeniorTechnical = SENIORITY_TITLE_KEYWORDS.some((kw) => buildSkillMatcher(kw).test(lowerTitle))
   if (isSeniorTechnical) {
     category_scores.technical = Math.round(category_scores.technical * SENIORITY_PENALTY_MULTIPLIER)
@@ -195,19 +228,28 @@ export function scoreJob(job: ScrapedJobInput, userSkills: Skill[]): ScoredJobRe
     match_score = Math.round(match_score * CLEARANCE_SUPPRESSION_MULTIPLIER)
   }
 
+  const on_site_required = ON_SITE_KEYWORDS.some((kw) => textToScan.includes(kw))
+  if (on_site_required) {
+    match_score = Math.round(match_score * ON_SITE_SUPPRESSION_MULTIPLIER)
+  }
+
   const experience_match_summary = clearance_required
     ? 'Requires U.S. government clearance/citizenship verification — deprioritized.'
-    : isSeniorTechnical && best_category === 'technical'
-      ? `${category_scores.technical}% technical keyword coverage, but posting signals senior/staff-level unaided ownership — scored down.`
-      : best_category
-        ? `${category_scores[best_category]}% coverage of your ${CATEGORY_LABEL[best_category]} skills (${matchedSkills.length} matched).`
-        : `Matches ${matchedSkills.length} key skills in your profile.`
+    : on_site_required
+      ? 'Posting text says on-site/office-based despite being listed as remote — deprioritized.'
+      : isSeniorTechnical && best_category === 'technical'
+        ? `${category_scores.technical}% technical keyword coverage, but posting signals senior/staff-level unaided ownership — scored down.`
+        : best_category
+          ? `${category_scores[best_category]}% coverage of your ${CATEGORY_LABEL[best_category]} skills (${matchedSkills.length} matched).`
+          : `Matches ${matchedSkills.length} key skills in your profile.`
 
   const why_fits = clearance_required
     ? 'Needs a security clearance or US-citizen verification most applicants cannot get.'
-    : matchedSkills.length > 0
-      ? `Strong keyword overlap with: ${matchedSkills.join(', ')}.`
-      : `Low keyword overlap. ${isNiche ? 'Flagged as potential niche/unconventional role.' : ''}`.trim()
+    : on_site_required
+      ? 'Not actually remote — the listing requires being on-site/in-office.'
+      : matchedSkills.length > 0
+        ? `Strong keyword overlap with: ${matchedSkills.join(', ')}.`
+        : `Low keyword overlap. ${isNiche ? 'Flagged as potential niche/unconventional role.' : ''}`.trim()
 
   return {
     ...job,
@@ -220,5 +262,6 @@ export function scoreJob(job: ScrapedJobInput, userSkills: Skill[]): ScoredJobRe
     niche_flag: isNiche && match_score < 40,
     remote_flag,
     clearance_required,
+    on_site_required,
   }
 }
