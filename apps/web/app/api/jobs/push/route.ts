@@ -3,6 +3,23 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { checkAuth } from '@/lib/auth'
 import { scoreJob, ScrapedJobInput } from '@/lib/scoring'
 
+// Indeed's redirect links (/rc/clk?jk=...&bb=...) carry a fresh tracking
+// token on every page load — the `jk` param is the only stable part, so the
+// same real posting scraped on two different runs produces two "different"
+// URLs and defeats dedup entirely. Collapse to Indeed's own canonical
+// /viewjob?jk=... form, which is both stable and a real permalink.
+function canonicalizeApplicationLink(link: string): string {
+  try {
+    const url = new URL(link)
+    if (url.hostname.includes('indeed.com') && url.searchParams.has('jk')) {
+      return `https://${url.hostname}/viewjob?jk=${url.searchParams.get('jk')}`
+    }
+  } catch {
+    // not a parseable URL — leave it as-is, scoring/insert will handle it
+  }
+  return link
+}
+
 // One Firecrawl search per unique company in the batch, not per job — a
 // batch of 200 jobs is usually well under 200 distinct companies, and
 // looking up the same company twice would just burn free-tier quota for
@@ -34,6 +51,10 @@ export async function POST(req: Request) {
 
     if (!Array.isArray(rawJobs)) {
       return NextResponse.json({ error: 'Expected an array of jobs' }, { status: 400 })
+    }
+
+    for (const job of rawJobs) {
+      job.application_link = canonicalizeApplicationLink(job.application_link)
     }
 
     // Freshness cutoff. Only enforceable where a source actually reports a
