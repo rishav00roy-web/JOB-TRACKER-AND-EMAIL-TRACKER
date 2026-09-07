@@ -80,62 +80,52 @@ export async function POST(req: Request) {
       batch.forEach((c, idx) => companyUrlMap.set(c, results[idx] ?? null))
     }
 
-    // 3. Upsert jobs (dedup on application_link)
-    // On conflict, we don't want to overwrite manual stages. 
-    // Supabase JS upsert allows `onConflict`. We will upsert, but we should be careful.
-    // To handle preserving 'stage' from manual entries, we can do an INSERT with ON CONFLICT DO UPDATE
-    // However, supabase-js `upsert` might overwrite all fields. 
-    // A safer way is to use a Postgres function or just simple upsert with ignoreDuplicates if we don't want to overwrite, 
-    // or we fetch existing and filter. 
-    // For V1, standard upsert where we just update scraped fields is fine if we only push scraped jobs.
-    
-    const jobsToInsert = scoredJobs.map(job => {
+    // Upsert on application_link. Deliberately omits `stage`, so a re-push of
+    // an already-tracked job updates its scraped fields without disturbing
+    // wherever the user has moved it on the board.
+    const jobsToInsert = scoredJobs.map((job) => {
       const companyUrl = companyUrlMap.get(job.company) ?? null
       return {
-      source: 'scraped',
-      job_title: job.job_title,
-      company: job.company,
-      company_url: companyUrl,
-      // A resolvable official domain is a real legitimacy signal — used
-      // heavily by ghost-job farms and low-effort postings that companies
-      // with an actual website/footprint don't share.
-      company_tier: companyUrl ? job.company_tier ?? 'Verified domain found' : job.company_tier ?? 'No domain found',
-      location: job.location,
-      work_type: job.work_type,
-      posted_date: job.posted_date,
-      match_score: job.match_score,
-      experience_match_summary: job.experience_match_summary,
-      key_skills_match: job.key_skills_match,
-      why_fits: job.why_fits,
-      application_link: job.application_link,
-      easy_apply: job.easy_apply,
-      compensation_insight: job.compensation_insight,
-      // Kept so the resume tailorer has JD text to work against later; a
-      // posting is usually gone by the time you want to re-read it.
-      description: job.description,
-      niche_flag: job.niche_flag,
-      remote_flag: job.remote_flag,
-      clearance_required: job.clearance_required,
-      on_site_required: job.on_site_required,
-      category_scores: job.category_scores,
-      best_category: job.best_category,
-      notes: job.clearance_required
-        ? 'Requires US clearance/citizenship — deprioritized'
-        : job.on_site_required
-          ? 'Not actually remote — on-site/office-based'
-          : job.niche_flag
-            ? 'Flagged as niche role'
-            : null,
+        source: 'scraped',
+        job_title: job.job_title,
+        company: job.company,
+        company_url: companyUrl,
+        // A resolvable official domain is a real legitimacy signal — used
+        // heavily by ghost-job farms and low-effort postings that companies
+        // with an actual website/footprint don't share.
+        company_tier: companyUrl ? job.company_tier ?? 'Verified domain found' : job.company_tier ?? 'No domain found',
+        location: job.location,
+        work_type: job.work_type,
+        posted_date: job.posted_date,
+        match_score: job.match_score,
+        experience_match_summary: job.experience_match_summary,
+        key_skills_match: job.key_skills_match,
+        why_fits: job.why_fits,
+        application_link: job.application_link,
+        easy_apply: job.easy_apply,
+        compensation_insight: job.compensation_insight,
+        // Kept so the resume tailorer has JD text to work against later; a
+        // posting is usually gone by the time you want to re-read it.
+        description: job.description,
+        niche_flag: job.niche_flag,
+        remote_flag: job.remote_flag,
+        clearance_required: job.clearance_required,
+        on_site_required: job.on_site_required,
+        category_scores: job.category_scores,
+        best_category: job.best_category,
+        notes: job.clearance_required
+          ? 'Requires US clearance/citizenship — deprioritized'
+          : job.on_site_required
+            ? 'Not actually remote — on-site/office-based'
+            : job.niche_flag
+              ? 'Flagged as niche role'
+              : null,
       }
     })
 
     const { error: insertError } = await supabaseAdmin
       .from('jobs')
-      .upsert(jobsToInsert, { 
-        onConflict: 'application_link',
-        // In a real scenario to preserve stage we'd map fields to update. 
-        // For now, Supabase upsert updates provided fields. We don't provide 'stage', so it should default or keep existing.
-      })
+      .upsert(jobsToInsert, { onConflict: 'application_link' })
 
     if (insertError) {
       console.error('Error inserting jobs:', insertError)
