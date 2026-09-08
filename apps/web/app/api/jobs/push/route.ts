@@ -40,7 +40,23 @@ const CANDIDATE_PROFILE =
   'fluency is a bonus/differentiator rather than the core job, or (b) genuine AI-generalist roles ' +
   '(AI training, data annotation, model evaluation, prompt writing, AI content review) that do not ' +
   'require a CS/engineering background. They are open to remote work from any country/timezone and ' +
-  'hold no security clearance or US citizenship.'
+  'hold no security clearance or US citizenship. IMPORTANT: the word "AI" appearing in a job title ' +
+  'is NOT evidence the role fits — it is extremely common for real software engineering roles to be ' +
+  'titled things like "AI Software Engineer", "AI Automation Engineer", or "AI/Automation Systems ' +
+  'Engineer". Ignore the word "AI" in the title entirely and judge only by the actual day-to-day work ' +
+  'described in the body: if the description is about building, maintaining, or architecting software ' +
+  'systems, pipelines, or infrastructure, drop it regardless of how "AI" the title sounds.'
+
+// Jobs per JD-check request. OpenRouter's free tier caps *requests*/day
+// (confirmed by the X-RateLimit-Remaining header on a real 429 hit earlier),
+// not raw tokens — so batching several jobs into one call cuts this stage's
+// request footprint by roughly this factor for free, no thoroughness lost.
+// Shorter per-job excerpt than a single-job call would need: disqualifying
+// signals (a seniority bar, a location lock, "requires coding") are almost
+// always stated early in a JD, so this trades a bit of tail context for a
+// meaningfully smaller combined prompt.
+const JD_CHECK_BATCH_SIZE = 8
+const JD_CHECK_DESC_CHARS = 2000
 
 // Stage-2 filter, LLM-backed: keyword scoring alone can't tell "AI Content
 // Reviewer" (wanted) from "AI Engineer" that's secretly a backend role
@@ -49,9 +65,11 @@ const CANDIDATE_PROFILE =
 // Deliberately called only on jobs that already passed the free filters
 // above (freshness, category match, not-technical) — the expense scales
 // with "plausible candidates," not raw scrape volume. Fails open on any
-// error (no key, 429, timeout, bad JSON): a bad OpenRouter day should
-// degrade to today's keyword-only behavior, not silently empty the board.
-async function jdSanityCheck(job: ScoredJobResult): Promise<{ keep: boolean; reason: string }> {
+// error (no key, 429, timeout, bad JSON, malformed/short response): a bad
+// OpenRouter day should degrade to today's keyword-only behavior, not
+// silently empty the board.
+async function jdSanityCheckBatch(jobs: ScoredJobResult[]): Promise<boolean[]> {
+  if (jobs.length === 0) return []
   try {
     const content = await callChatCompletionWithRetry(
       [
@@ -59,24 +77,41 @@ async function jdSanityCheck(job: ScoredJobResult): Promise<{ keep: boolean; rea
           role: 'system',
           content:
             `You screen job postings for one specific candidate. ${CANDIDATE_PROFILE} ` +
-            'Given a job title and its full description, decide if it is worth showing them. ' +
-            'Drop it if: it actually requires hands-on coding/engineering as a core function ' +
-            'regardless of title; it sets a seniority/experience bar clearly beyond early-career ' +
-            '(e.g. "10+ years", "expert-level", "must have shipped production ML systems"); or it ' +
-            'has a real location/citizenship/timezone restriction despite claiming remote. ' +
-            'Otherwise keep it. Respond with strict JSON only: {"keep": boolean, "reason": "one short sentence"}.',
+            'You will get a JSON array of jobs, each {"i": index, "title": ..., "description": ...}. ' +
+            'For each one, decide if it is worth showing this candidate. Drop it if: it actually ' +
+            'requires hands-on coding/engineering as a core function regardless of title; it sets a ' +
+            'seniority/experience bar clearly beyond early-career (e.g. "10+ years", "expert-level", ' +
+            '"must have shipped production ML systems"); or it has a real location/citizenship/timezone ' +
+            'restriction despite claiming remote. Otherwise keep it. Respond with strict JSON only: ' +
+            '{"verdicts": [{"i": index, "keep": boolean}, ...]}, one entry per job, same indices given.',
         },
         {
           role: 'user',
-          content: `Title: ${job.job_title}\n\nDescription:\n${(job.description || '').slice(0, 6000)}`,
+          content: JSON.stringify(
+            jobs.map((job, i) => ({
+              i,
+              title: job.job_title,
+              description: (job.description || '').slice(0, JD_CHECK_DESC_CHARS),
+            }))
+          ),
         },
       ],
       { json: true, model: JD_CHECK_MODEL }
     )
     const parsed = JSON.parse(content)
-    return { keep: parsed.keep !== false, reason: String(parsed.reason || '') }
+    const verdicts = parsed?.verdicts
+    if (!Array.isArray(verdicts) || verdicts.length !== jobs.length) {
+      // Malformed/short response — fail open for the whole batch rather than
+      // risk mapping the wrong verdict to the wrong job by index.
+      return jobs.map(() => true)
+    }
+    const keepByIndex = new Map<number, boolean>()
+    for (const v of verdicts) {
+      if (v && typeof v.i === 'number') keepByIndex.set(v.i, v.keep !== false)
+    }
+    return jobs.map((_, i) => keepByIndex.get(i) ?? true)
   } catch {
-    return { keep: true, reason: '' }
+    return jobs.map(() => true)
   }
 }
 
@@ -156,20 +191,27 @@ export async function POST(req: Request) {
     const droppedNoMatch = allScoredJobs.length - allScoredJobs.filter((j) => j.best_category !== null).length
     const categoryMatchedJobs = allScoredJobs.filter((j) => j.best_category !== null)
 
-    // 2b. LLM JD sanity check (see jdSanityCheck above) — skipped outright,
-    // not just fail-open per-job, when no key is configured at all.
+    // 2b. LLM JD sanity check (see jdSanityCheckBatch above) — skipped
+    // outright, not just fail-open per-batch, when no key is configured at
+    // all. Jobs are grouped into JD_CHECK_BATCH_SIZE-sized requests first
+    // (cuts request count, see the comment on that constant), then up to
+    // CONCURRENCY_JD of those batch-requests run at once.
     let droppedByJdCheck = 0
     const jdCheckSkipped = !hasApiKey()
     let scoredJobs = categoryMatchedJobs
     if (!jdCheckSkipped) {
       const CONCURRENCY_JD = 5
-      const verdicts: { keep: boolean; reason: string }[] = []
-      for (let i = 0; i < categoryMatchedJobs.length; i += CONCURRENCY_JD) {
-        const batch = categoryMatchedJobs.slice(i, i + CONCURRENCY_JD)
-        const results = await Promise.all(batch.map((j) => jdSanityCheck(j)))
-        verdicts.push(...results)
+      const batches: ScoredJobResult[][] = []
+      for (let i = 0; i < categoryMatchedJobs.length; i += JD_CHECK_BATCH_SIZE) {
+        batches.push(categoryMatchedJobs.slice(i, i + JD_CHECK_BATCH_SIZE))
       }
-      scoredJobs = categoryMatchedJobs.filter((_, idx) => verdicts[idx]!.keep)
+      const keepFlags: boolean[] = []
+      for (let i = 0; i < batches.length; i += CONCURRENCY_JD) {
+        const chunk = batches.slice(i, i + CONCURRENCY_JD)
+        const results = await Promise.all(chunk.map((b) => jdSanityCheckBatch(b)))
+        for (const r of results) keepFlags.push(...r)
+      }
+      scoredJobs = categoryMatchedJobs.filter((_, idx) => keepFlags[idx])
       droppedByJdCheck = categoryMatchedJobs.length - scoredJobs.length
     }
 
