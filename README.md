@@ -1,6 +1,6 @@
 # Agentic Job Application Tracker
 
-A fully-automated, Kanban-style Job Application Tracker designed to manage both scraped opportunities (via Apify and Claude) and manually submitted applications. Built with a modern, glassmorphic dark-mode aesthetic.
+A fully automated, Kanban-style job application tracker built to manage both scraped opportunities and manual applications in one board, with a glassmorphic dark-mode design. It runs on a deterministic local scoring engine that matches job descriptions against a structured skill profile, weighing agentic AI skills against general frontend skills, with no LLM API costs for scoring. It also flags unconventional opportunities that don't fit typical keyword matching, and deduplicates manual and scraped entries by application link. Built as a Turborepo monorepo: a Next.js frontend and internal API, an MCP server that originally passed data from Claude Desktop into the app, and a Postgres schema with RLS via Supabase. The scraping pipeline described here has since evolved past the original Apify and Claude setup, now running on n8n, Crawl4AI, and Firecrawl.
 
 ## Features
 
